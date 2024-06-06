@@ -1,4 +1,4 @@
-Hi ![](https://user-images.githubusercontent.com/18350557/176309783-0785949b-9127-417c-8b55-ab5a4333674e.gif)My name is Wannawachat Chiangtong   Student | Chulalongkorn U.     * 🌍  I'm based in Bangkok, Ratchathewi, Thailand   * 🧠  I'm learning I've been learning SQL,Excel,Python   * ⚡  I am interested in data.  
+Hi ![](https://user-images.githubusercontent.com/18350557/176309783-0785949b-9127-417c-8b55-ab5a4333674e.gif)My name is Wannawachat Chiangtong ==============================================================================================================================================  Student | Chulalongkorn U. --------------------------  * 🌍  I'm based in Bangkok, Ratchathewi, Thailand * 🧠  I'm learning I've been learning SQL,Excel,Python * ⚡  I am interested in data.
 
 ### Skills  
 
@@ -10,7 +10,3 @@ Hi ![](https://user-images.githubusercontent.com/18350557/176309783-0785949b-912
 
 <a href="http://www.github.com/Prin-221B"><img src="https://github-readme-stats.vercel.app/api?username=Prin-221B&show_icons=true&hide=&count_private=true&title_color=ffffff&text_color=ffffff&icon_color=3382ed&bg_color=000000&hide_border=true&show_icons=true" alt="Prin-221B's GitHub stats" /></a>
 <a href="https://github.com/Prin-221B" align="left"><img src="https://github-readme-stats.vercel.app/api/top-langs/?username=Prin-221B&langs_count=10&title_color=ffffff&text_color=ffffff&icon_color=3382ed&bg_color=000000&hide_border=true&locale=en&custom_title=Top%20%Languages" alt="Top Languages" /></a>
-
-<a href="http://www.github.com/Prin-221B"><img src="https://github-readme-stats.vercel.app/api?username=Prin-221B&show_icons=true&hide=&count_private=true&title_color=ffffff&text_color=ffffff&icon_color=3382ed&bg_color=000000&hide_border=true&show_icons=true" alt="Prin-221B's GitHub stats" /></a>
-<a href="https://github.com/Prin-221B" align="left"><img src="https://github-readme-stats.vercel.app/api/top-langs/?username=Prin-221B&langs_count=10&title_color=ffffff&text_color=ffffff&icon_color=3382ed&bg_color=000000&hide_border=true&locale=en&custom_title=Top%20%Languages" alt="Top Languages" /></a>
-
