@@ -1,0 +1,115 @@
+-- Q1
+select
+  name,
+  country
+from users 
+where country = 'Thailand'
+
+-- Q2
+select 
+  country,
+  count(*) * 1.0 as number_user_in_country
+from users
+group by country 
+order by 2 DESC ;
+
+-- Q3
+select
+  product_name,
+  price
+from products
+where price > 300 ; 
+
+-- Q4
+select
+  user_id,
+  count(order_id) as total_order
+from orders
+group by user_id ;
+
+-- Q5
+select
+  p.product_id,
+  product_name,
+  price,
+  sum(o.quantity) as total,
+  sum(o.quantity * price) as total_price
+from products as p
+join order_items as o
+on p.product_id = o.product_id
+group by p.product_id, p.product_name
+order by p.product_id ;
+
+-- Q6
+select 
+  product_id,
+  sum(quantity) as total
+from order_items 
+group by product_id 
+order by 2 DESC
+limit 5 ;
+
+-- Q7
+SELECT
+  u.user_id,
+  u.name,
+  SUM(t.quantity * p.price) AS total_spent
+FROM users u
+JOIN orders o      ON u.user_id = o.user_id
+JOIN order_items t ON o.order_id = t.order_id
+JOIN products p    ON t.product_id = p.product_id
+GROUP BY u.user_id, u.name
+ORDER BY total_spent DESC;
+
+-- Q8 
+with total_price as (
+  select
+      t.product_id,
+      p.product_name,
+      p.price,
+      sum(quantity) * price as total
+  from order_items t
+  join products p on t.product_id = p.product_id
+  group by product_name
+  order by p.product_id
+)
+  
+select 
+    sum(tp.total) / count(ot.order_id) as AOV
+from order_items ot
+join total_price tp on ot.product_id = tp.product_id
+
+
+SELECT
+    SUM(t.quantity * p.price) / COUNT(DISTINCT o.order_id) AS AOV
+FROM orders o
+JOIN order_items t
+ON o.order_id = t.order_id
+JOIN products p
+ON t.product_id = p.product_id; 
+
+
+-- Q9 
+select 
+  country,
+  sum(quantity * price ) as total_revenue
+from users u
+join orders o      on u.user_id = o.user_id
+join order_items t on o.order_id = t.order_id
+join products p    on t.product_id = p.product_id
+group by country
+order by 2 desc
+limit 1 ;
+
+-- Q10
+select 
+  u.user_id,
+  t.quantity,
+  sum(quantity * price) as total_spent
+from users u
+join orders o      on u.user_id = o.user_id
+join order_items t on o.order_id = t.order_id 
+join products p    on t.product_id = p.product_id
+group by u.user_id
+order by total_spent desc
+limit 3 ;
