@@ -1,0 +1,187 @@
+-- Q1
+with daily_active_users as (
+  select 
+    session_start,
+    strftime('%Y-%m', session_start) as monthly,
+    count(distinct user_id) as dau
+  from sessions
+  group by session_start
+),
+month_active_users as (
+  select 
+    strftime('%Y-%m', session_start) as monthly,
+    count(distinct user_id) as mau
+  from sessions 
+  group by monthly
+)
+
+select 
+  d.monthly,
+  round(avg(dau), 2) as dau_avg,
+  m.mau,
+  round(avg(d.dau) * 1.0 / m.mau, 2) as stickiness
+from daily_active_users d
+left join month_active_users m on d.monthly = m.monthly
+group by d.monthly ; 
+
+-- Q2 
+select 
+  acquisition_channel as channel,
+  round(sum(s.session_duration) * 1.0 / count(distinct u.user_id), 2) as avg_session_duration 
+from users u 
+left join sessions s on u.user_id = s.user_id
+group by u.acquisition_channel
+
+-- Q3
+select 
+  -- premium_user,
+  count(distinct u.user_id) as premium_user,
+  round(count(distinct o.user_id) * 1.0 / count(distinct u.user_id), 2) as conversion_rate ,
+  round(sum(o.revenue) * 1.0 / count(distinct u.user_id), 2) as arpu,
+  round(count(s.session_start) * 1.0/ count(distinct s.user_id), 2) as avg_sessions
+from users u 
+left join orders o on u.user_id = o.user_id
+left join sessions s on o.user_id = s.user_id 
+-- group by premium_user
+where u.premium_user = 1 
+  
+-- Q4
+with event_users as(
+  select 
+    user_id,
+    case when event_type = 'view' then 1  else 0 end as viewed,
+    case when event_type = 'add_to_cart' then 1  else 0 end as added,
+    case when event_type = 'purchase' then 1  else 0 end as purchased
+  from events
+  group by user_id
+)
+
+select
+  country,
+  sum(viewed) as view_usesrs,
+  sum(added) as add_usesrs,
+  sum(purchased) as purchase_usesrs
+from users u
+left join event_users e on u.user_id = e.user_id
+group by country 
+  
+-- Q5
+with first_purchases as (
+  select 
+    u.user_id,
+    signup_date,
+    min(order_time) as first_purchase
+  from users u 
+  left join orders o on u.user_id = o.user_id 
+  group by u.user_id 
+),
+timediff as (
+  select 
+    user_id,
+    julianday(first_purchase) - julianday(signup_date) as datediff
+  from first_purchases 
+  where first_purchase is not null 
+)
+
+select 
+  case
+    when datediff < 4 then '0-3 days' 
+    when datediff < 8 then '4-7 days'
+    when datediff < 15 then '8-14 days'
+    else '15+ days'
+  end as segment,
+  count(distinct user_id) as users
+from timediff 
+group by segment
+order by 
+  (case segment
+    when '0-3 days' then 1
+    when '4-7 days' then 2
+    when '8-14 days' then 3
+    when '15+ days' then 4
+  end)
+  
+-- Q6
+select 
+  e.variant,
+  round(count(distinct o.user_id) * 1.0 / count(distinct u.user_id), 2) as conversion_rate,
+  round(sum(revenue) * 1.0 / count(distinct u.user_id), 2) as arpu,
+  round(avg(revenue), 2) as avg_revenue
+from users u 
+left join experiments e on u.user_id = e.user_id
+left join orders o on u.user_id = o.user_id
+group by e.variant
+
+-- Q7
+with type_user as (
+  select 
+  u.user_id,
+    case 
+      when ticket_id > 1 then 'ticket' 
+      else 'un_ticket'
+    end as type
+  from users u
+  left join support_tickets t on u.user_id = t.user_id
+)
+
+select 
+  t.type as user_type,
+  round(sum(o.revenue), 2) as revenue,
+  count(s.session_start) as num_session,
+  round(count(distinct o.user_id) * 1.0 / count(distinct t.user_id), 2) as conversion_rate
+from type_user t
+left join orders o on t.user_id = o.user_id
+left join sessions s on t.user_id = s.user_id
+group by type 
+
+-- Q8
+with scores as (
+  select 
+    user_id,
+    event_type,
+    (case
+      when event_type = 'view' then 1 
+      when event_type = 'click' then 2
+      when event_type = 'add_to_cart' then 3
+      else 5 
+      end ) as score 
+  from events 
+)
+
+select 
+  user_id,
+  sum(score) as score 
+from scores 
+group by user_id
+order by score desc
+limit 20 ;
+
+-- Q9 
+with user_time as (
+  select 
+    u.user_id,
+    u.signup_date,
+    u.acquisition_channel,
+    s.session_start
+  from users u
+  left join sessions s on u.user_id = s.user_id 
+),
+  
+month_retention as (
+  select
+    user_id,
+    acquisition_channel,
+    (cast(strftime('%m', session_start) as integer ) -
+    cast(strftime('%m', signup_date) as integer ) ) as monthdiff
+  from user_time 
+
+)
+
+select
+  acquisition_channel,
+  count(distinct user_id) as usesrs
+from month_retention
+where monthdiff = 1
+group by acquisition_channel
+
+-- Q10
