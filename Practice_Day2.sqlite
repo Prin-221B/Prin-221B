@@ -1,0 +1,110 @@
+-- Q1
+select 
+  acquisition_channel,
+  count(acquisition_channel) as total_users
+from users 
+group by acquisition_channel
+order by total_users desc ;  
+
+-- Q2
+select 
+  device,
+  count(device) as total_sessions
+from sessions
+group by device
+
+-- Q3
+select
+  event_type,
+  count(event_type) as total_events
+from events
+group by event_type
+
+-- Q4
+select
+  count(session_id) / count(distinct(user_id)) as avg_session
+from sessions
+
+-- Q5
+select 
+  count(distinct (u.user_id)) as total_purchase
+from users u
+join sessions s on u.user_id = s.user_id
+join events e   on s.session_id = e.session_id
+where event_type = 'purchase'
+
+-- Q6
+with purchase_users as (
+  select 
+    distinct event_id
+  from events 
+  where event_type = 'purchase'
+), 
+view_product_users as(
+  select 
+    distinct event_id
+  from events
+  where event_type = 'view_product'
+)
+  
+select 
+  count(p.event_id) * 1.0 / count(v.event_id) as conversion_rate
+from purchase_users p
+full outer join view_product_users v 
+on p.event_id = v.event_id  
+
+"""
+with purchase_users as (
+  select 
+    distinct event_id
+  from events 
+  where event_type = 'purchase'
+), 
+view_product_users as(
+  select 
+    distinct event_id
+  from events
+  where event_type = 'view_product'
+)
+  
+select 
+  count(p.event_id) * 1.0 / count(v.event_id) as conversion_rate
+from purchase_users p
+full outer join view_product_users v 
+on p.event_id = v.event_id
+  """
+
+-- Q7
+select
+  country,
+  sum(revenue) as total_revenue
+from users u
+left join orders o on u.user_id = o.user_id
+group by country
+order by 2 desc;
+
+-- Q8
+select 
+  u.user_id,
+  sum(revenue) as total_revenue
+from users u
+left join orders o on u.user_id = o.user_id
+group by u.user_id
+order by 2 desc ;
+
+-- Q9
+select
+  strftime('%Y-%m', order_time) AS month,
+  sum(revenue) as total_revenue
+from orders 
+group by month 
+order by total_revenue ;
+
+-- Q10
+select 
+  acquisition_channel,
+  sum(revenue) as total_revenue
+from users u
+left join orders o on u.user_id = o.user_id
+group by acquisition_channel
+order by total_revenue desc ;
