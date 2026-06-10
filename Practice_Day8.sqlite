@@ -1,0 +1,144 @@
+-- Q1
+select 
+  strftime('%Y-%m', session_start) as monthly,
+  count(distinct user_id) as mau
+from sessions 
+group by monthly ;
+
+-- Q2
+with recursive dates as (
+  select 
+    min(date(session_start)) as report_date  
+  from sessions
+
+  union all 
+
+  select 
+    date(report_date, '+1 day') 
+  from dates
+  where report_date < (select max(date(session_start)) from sessions )
+)
+
+select 
+  d.report_date,
+  count(distinct s.user_id ) as active_user_7
+from dates d
+left join sessions s 
+  on date(s.session_start)
+  between date(d.report_date, '-6 day')
+  and d.report_date
+group by d.report_date
+order by d.report_date ;
+
+-- Q3
+select 
+  strftime('%Y-%m', signup_date) as monthly,
+  count(distinct user_id) as cohort_size
+  from users 
+group by monthly ;
+
+-- Q4
+with first_month as (
+  select
+    user_id,
+    date(min(signup_date), 'start of month') as cohort_month
+  from users
+  group by user_id
+),
+  
+month1_return as (
+  select
+    f.user_id,
+    f.cohort_month
+  from first_month f
+  join sessions s 
+    on s.user_id = f.user_id
+    and date(s.session_start, 'start of month') = date(f.cohort_month, '+1 month') 
+)
+
+select 
+  count(distinct f.user_id) as cohort_size,
+  count(distinct r.user_id) as returned_users,
+  round(count(distinct r.user_id) * 100.0 / count(distinct f.user_id), 2) as retention_rate 
+from first_month f
+join month1_return r
+  on f.user_id = r.user_id
+group by f.cohort_month
+order by f.cohort_month 
+
+-- Q5
+select 
+    count(distinct case when event_type = 'purchase' then user_id end ) * 100.0 / 
+    count(distinct case when event_type = 'view' then user_id end) as conversion_rate 
+from events ;
+
+-- Q6
+select 
+  sum(revenue) / count(distinct u.user_id) as arpu
+from orders o
+left join users u on o.user_id = u.user_id
+
+-- Q7
+select
+  user_id,
+  sum(revenue) * 1.0 as total_revenue
+from orders 
+group by user_id
+order by total_revenue desc 
+limit 10 ;
+
+-- Q8
+with monthly_spend as (
+  select 
+    channel,
+    sum(spend) * 1.0 as total_spend
+  from marketing_spend
+  group by channel
+),
+  
+new_user_per_channel as (
+  select
+    acquisition_channel,
+    count(distinct user_id) as new_users
+  from users
+  group by acquisition_channel
+)
+
+select 
+  u.acquisition_channel,
+  round(total_spend, 2) as marketing_spend ,
+  u.new_users,
+  round(m.total_spend * 1.0 / nullif(u.new_users, 0), 2) as cac
+from monthly_spend m
+join new_user_per_channel u on m.channel = u.acquisition_channel
+order by cac
+
+-- Q9
+select 
+  acquisition_channel,
+  round(sum(revenue) * 1.0, 2 ) as total_revenue
+from users u
+join orders o on u.user_id = o.user_id 
+group by acquisition_channel 
+order by total_revenue desc ;
+
+-- Q10
+with scores as (
+  select 
+  user_id,
+  case 
+    when event_type = 'view' then 1
+    when event_type = 'click' then 2
+    when event_type = 'add_to_cart' then 3
+    when event_type = 'purchase' then 5
+  end as score 
+  from events 
+)
+
+select 
+  user_id,
+  sum(score) as engagement_scores 
+from scores 
+group by user_id 
+order by engagement_scores desc 
+limit 10 ;
