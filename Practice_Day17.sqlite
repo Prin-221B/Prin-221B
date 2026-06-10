@@ -1,0 +1,385 @@
+-- Q1 Revenue Decomposition by Subscription Plan
+select 
+  u.subscription_plan,
+  count(distinct u.user_id) as users ,
+  count(distinct o.order_id) as puchases,
+  round(sum(o.revenue), 2) as total_revenue,
+  round(sum(o.revenue) * 1.0 / count(distinct u.user_id), 2) as arpu,
+  round(sum(o.revenue) * 1.0 / count(distinct o.order_id), 2) as aov,
+  round(count(distinct o.order_id) * 1.0 / count(distinct o.user_id), 2) as purchase_frequency
+from users u 
+left join orders o on u.user_id = o.user_id 
+group by u.subscription_plan
+
+-- Q2 Engagement Quality by Device + Channel
+with event_per_session as (
+  select 
+    session_id,
+    count(*) as num_events
+  from events 
+  group by session_id
+),
+  
+session_stats as (
+  select 
+    u.acquisition_channel,
+    s.device_type,
+    round(avg(session_duration), 2) as avg_session_duration,
+    round(count(distinct s.session_id) * 1.0 / count(distinct u.user_id), 2) as session_per_user,
+    round(avg(es.num_events), 2) as avg_event_per_session
+  from sessions s
+  join users u on s.user_id = u.user_id
+  left join event_per_session es on s.session_id = es.session_id
+  group by u.acquisition_channel, s.device_type  
+),
+  
+revenue_user as (
+  select
+    u.acquisition_channel,
+    round(count(distinct o.user_id) * 1.0 / count(distinct u.user_id), 2) as conversion_rate,
+    round(sum(o.revenue) * 1.0 / count(distinct u.user_id), 2) as arpu 
+  from users u 
+  left join orders o on u.user_id = o.user_id
+  group by u.acquisition_channel  
+)
+
+select 
+  s.acquisition_channel,
+  s.device_type,
+  s.avg_session_duration,
+  s.session_per_user,
+  s.avg_event_per_session,
+  ru.conversion_rate,
+  ru.arpu
+from session_stats s
+join revenue_user ru on s.acquisition_channel = ru.acquisition_channel
+
+-- Q3 Full Funnel Analysis
+with funnel_user as (
+  select 
+    user_id,
+    max(case when event_type = 'view' then 1 else 0 end ) as viewed,
+    max(case when event_type = 'click' then 1 else 0 end ) as clicked,
+    max(case when event_type = 'search' then 1 else 0 end ) as searched,
+    max(case when event_type = 'add_to_cart' then 1 else 0 end ) as added,
+    max(case when event_type = 'checkout' then 1 else 0 end ) as checkouted,
+    max(case when event_type = 'purchase' then 1 else 0 end ) as purchased
+  from events 
+  group by user_id  
+),
+
+summary_funnel as (
+  select 
+    sum(viewed)     as user_view,
+    sum(clicked)    as user_click,
+    sum(searched)   as user_search,
+    sum(added)      as user_add,
+    sum(checkouted) as user_checkout,
+    sum(purchased)  as user_purchase
+  from funnel_user
+),
+
+conversion_rate as (
+  select
+  -- user
+  user_view,
+  user_click,
+  user_search,
+  user_add,
+  user_checkout,
+  user_purchase,
+  
+  -- conversion
+  round(user_click * 1.0 / user_view, 2)         as cvr_view_to_click,
+  round(user_search * 1.0 / user_click, 2)       as cvr_click_to_search,
+  round(user_add * 1.0 / user_search, 2)         as cvr_search_to_add,
+  round(user_checkout * 1.0 / user_add, 2)       as cvr_add_to_checkout,
+  round(user_purchase * 1.0 / user_checkout, 2) as cvr_checkout_to_purchase
+from summary_funnel
+)
+
+select 
+  -- user
+  user_view,
+  user_click,
+  user_search,
+  user_add,
+  user_checkout,
+  user_purchase,
+
+  -- conversion_rate
+  cvr_view_to_click,
+  cvr_click_to_search,
+  cvr_search_to_add,
+  cvr_add_to_checkout,
+  cvr_checkout_to_purchase,
+
+  -- drop off
+  1 - cvr_view_to_click        as drop_view_to_click,
+  1 - cvr_click_to_search      as drop_click_to_search,
+  1 - cvr_search_to_add        as drop_search_to_add,
+  1 - cvr_add_to_checkout      as drop_add_to_checkout,
+  1 - cvr_checkout_to_purchase as drop_checkout_to_purchase
+from conversion_rate
+
+-- Q4  Churn Risk Revenue Exposure
+with user_risk as (
+  select
+    user_id,
+    case 
+      when predicted_churn_prob > 0.7 then 'High Risk'
+      when predicted_churn_prob >= 0.4 then 'Medium Risk'
+      else 'Low Risk'
+    end as risk
+  from predictions
+),
+
+segment as (
+  select 
+    risk,
+    count(distinct ur.user_id) as users,
+    sum(o.revenue) as revenue,
+    round(sum(o.revenue) * 1.0 / count(distinct o.user_id),2) as avg_revenue_per_user,
+    round(count(distinct o.order_id) * 1.0 / count(distinct o.user_id),2) as purchase_frequence
+  from user_risk ur 
+  left join orders o on ur.user_id = o.user_id
+  group by risk  
+)
+
+select 
+  risk,
+  users,
+  round(revenue * 1.0 / sum(revenue) over(), 2) as revenue_share,
+  avg_revenue_per_user,
+  purchase_frequence
+from segment
+order by 
+  case risk 
+    when 'High Risk'   then 1
+    when 'Medium Risk' then 2
+    when 'Low Risk'    then 3
+  end
+
+-- Q5 High Intent Users
+with user_score as (
+  select 
+    user_id,
+    sum(
+      case 
+        when event_type = 'view'        then 1 
+        when event_type = 'click'       then 2
+        when event_type = 'search'      then 2
+        when event_type = 'add_to_cart' then 4
+        when event_type =  'checkout'   then 6
+        when event_type = 'purchase'    then 10
+      end 
+    ) as score
+  from events e
+  group by user_id
+),
+  
+user_revenue as (
+  select 
+    us.user_id,
+    us.score,
+    round(sum(o.revenue) * 1.0, 2) as revenue 
+  from user_score us
+  left join orders o on us.user_id = o.user_id
+  group by us.user_id  
+)
+
+select 
+  ur.user_id,
+  ur.score,
+  ur.revenue,
+  count(distinct s.session_id) as num_sessions
+from user_revenue ur
+left join sessions s on ur.user_id = s.user_id 
+group by ur.user_id
+order by ur.score desc, ur.revenue desc
+limit 30 ;
+
+-- Q6 Cohort Retention + Revenue Matrix
+with cohort as (
+  select 
+    user_id,
+    date(signup_date, 'start of month') as cohort_month
+  from users  
+),
+
+user_sessions as (
+    select 
+      s.user_id,
+      c.cohort_month,
+      (cast(strftime('%Y', s.session_start) as integer) - cast(strftime('%Y', c.cohort_month) as integer)) * 12
+      + (cast(strftime('%m', s.session_start) as integer) - cast(strftime('%m', c.cohort_month) as integer)) as month_offset
+    from sessions s
+    join cohort c on s.user_id = c.user_id
+),
+  
+user_orders as (
+    SELECT 
+      o.user_id,
+      c.cohort_month,
+      (CAST(strftime('%Y', o.order_time) AS INTEGER) - CAST(strftime('%Y', c.cohort_month) AS INTEGER)) * 12
+      + (CAST(strftime('%m', o.order_time) AS INTEGER) - CAST(strftime('%m', c.cohort_month) AS INTEGER)) AS month_offset,
+      o.revenue
+    FROM orders o
+    JOIN cohort c ON o.user_id = c.user_id
+),
+
+cohort_size AS (
+    SELECT 
+      cohort_month, 
+      COUNT(DISTINCT user_id) AS month0_users
+    FROM cohort GROUP BY cohort_month
+),
+
+retention AS (
+    SELECT 
+      cohort_month,
+      COUNT(DISTINCT CASE WHEN month_offset = 1 THEN user_id END) AS active_m1,
+      COUNT(DISTINCT CASE WHEN month_offset = 2 THEN user_id END) AS active_m2
+    FROM user_sessions 
+    GROUP BY cohort_month
+),
+  
+revenue AS (
+    SELECT 
+      cohort_month,
+      ROUND(SUM(CASE WHEN month_offset = 0 THEN revenue ELSE 0 END), 2) AS rev_m0,
+      ROUND(SUM(CASE WHEN month_offset = 1 THEN revenue ELSE 0 END), 2) AS rev_m1,
+      ROUND(SUM(CASE WHEN month_offset = 2 THEN revenue ELSE 0 END), 2) AS rev_m2
+    FROM user_orders GROUP BY cohort_month
+)
+
+SELECT
+    cs.cohort_month,
+    cs.month0_users,
+    ROUND(100.0 * r.active_m1 / cs.month0_users, 1) AS month1_retention_pct,
+    ROUND(100.0 * r.active_m2 / cs.month0_users, 1) AS month2_retention_pct,
+    COALESCE(rv.rev_m0, 0) AS month0_revenue,
+    COALESCE(rv.rev_m1, 0) AS month1_revenue,
+    COALESCE(rv.rev_m2, 0) AS month2_revenue
+FROM cohort_size cs
+LEFT JOIN retention r USING(cohort_month)
+LEFT JOIN revenue rv USING(cohort_month)
+ORDER BY cs.cohort_month;
+
+-- Q7 Feature Adoption Impact
+with feature_user as (
+  select
+    user_id,
+    max(case when feature_name = 'recommendation_ai' then 1 else 0 end) as used_ai
+  from feature_usage
+  group by user_id  
+),
+
+session_stat as (
+  select 
+    f.user_id,
+    count(distinct s.session_id) as session_count
+  from feature_user f
+  left join sessions s on f.user_id = s.user_id 
+  group by f.user_id  
+),
+
+order_stat as (
+  select 
+    f.user_id,
+    sum(o.revenue) as revenue,
+    count(o.order_id) as order_count
+  from feature_user f
+  left join orders o on f.user_id = o.user_id
+  group by o.user_id
+)
+
+select 
+  case when f.used_ai = 1 then 'Use AI' else 'Not Use AI' end as segment,
+  round(sum(session_count) * 1.0 / count(distinct f.user_id), 2) as avg_session,
+  round(count(distinct o.user_id) * 1.0 / count(distinct f.user_id), 2) as conversion_rate,
+  round(sum(o.revenue) * 1.0 / count(distinct f.user_id), 2) as arpu,
+  round(sum(o.revenue) * 1.0 / count(distinct o.order_count), 2) as avg_revenue_per_order
+from feature_user f
+left join session_stat s on f.user_id = s.user_id
+left join order_stat o on f.user_id = o.user_id
+group by segment
+
+-- Q8 Notification Channel Effectiveness
+with noti_stat as (
+  select 
+    n.user_id,
+    n.channel,
+    n.clicked,
+    sum(o.revenue) as revenue,
+    count(o.order_id) as order_count
+  from notifications n
+  left join orders o on n.user_id = o.user_id
+  group by n.user_id, n.channel, n.clicked
+),
+
+session_stat as (
+  select
+    f.user_id,
+    sum(s.session_duration) as duration
+  from feature_usage f
+  left join sessions s  on f.user_id = s.user_id
+  group by f.user_id
+),
+
+total_users as (
+  select 
+    count(distinct user_id) as total
+  from noti_stat
+)
+
+select
+  n.channel,
+  round(sum(n.clicked) * 100.0 / t.total, 2) as ctr,
+  round(sum(n.revenue) * 1.0 / count(distinct n.user_id), 2 ) as avg_revenue,
+  round(sum(s.duration) * 1.0 / count(distinct n.user_id), 2 ) as avg_duration,
+  round(sum(n.order_count) * 1.0 / count(distinct n.user_id), 2 ) as purchase_frequency
+from noti_stat n 
+left join session_stat s on n.user_id = s.user_id
+cross join total_users t
+group by n.channel
+
+-- Q9 Support Ticket Impact Analysis
+with segment_ticket as (
+  select 
+    u.user_id,
+    case when ticket_id is not null then 'Ticket Support' else 'Non Ticket Support' end as segment
+  from users u 
+  left join support_tickets t on u.user_id = t.user_id
+),
+
+session_stat as (
+  select
+    u.user_id,
+    count(distinct session_id) as session_count
+  from users u
+  left join sessions s on u.user_id = s.user_id 
+  group by u.user_id
+),
+
+order_stat as (
+  select 
+    u.user_id,
+    sum(o.revenue) as revenue
+  from users u 
+  left join orders o on u.user_id = o.user_id
+  group by u.user_id 
+)
+
+select 
+  t.segment,
+  round(sum(s.session_count) * 1.0 / count(distinct t.user_id), 2) as avg_session,
+  round(count(o.revenue) * 1.0 / count(distinct t.user_id), 2) as conversion_rate,
+  round(sum(o.revenue) * 1.0 / count(distinct t.user_id), 2) as arpu,
+  round(sum(predicted_churn_prob) * 1.0 / count(distinct t.user_id), 2) as churn_risk
+from segment_ticket t 
+left join session_stat s on t.user_id = s.user_id
+left join order_stat o   on t.user_id = o.user_id
+left join predictions p  on t.user_id = p.user_id
+group by segment
+
