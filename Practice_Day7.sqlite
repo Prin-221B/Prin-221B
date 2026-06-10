@@ -1,0 +1,102 @@
+-- Q1
+select 
+  strftime('%Y-%m', session_start) as monthly,
+  count(distinct user_id) as mau
+from sessions 
+group by monthly 
+order by mau desc ;
+
+-- Q2
+
+
+-- Q3
+select 
+  user_id,
+  sum(revenue) * 1.0 as total_revenue
+from orders 
+group by user_id
+order by total_revenue desc 
+limit 10 ;
+
+-- Q4
+select 
+  country,
+  u. user_id,
+  rank () over (partition by country order by sum(revenue) * 1.0  desc) as revenue_rank 
+from users u 
+left join orders o on u.user_id = o.user_id 
+group by country, u.user_id
+
+-- Q5
+with segement_users as (
+  select   
+    count(distinct case when event_type = 'view' then user_id end ) as nums_view,
+    count(distinct case when event_type = 'click' then user_id end) as click,
+    count(distinct case when event_type = 'add_to_cart' then user_id end) as add_to_cart,
+    count(distinct case when event_type = 'purchase' then user_id end) as purchase
+  from events 
+)
+  
+select 'view' as stage, nums_view as total_users from segement_users 
+union all 
+select 'click' , click from segement_users
+union all 
+select 'add_to_cart', add_to_cart from segement_users
+union all 
+select 'purchase', purchase from segement_users
+
+-- Q6 
+
+
+-- Q7
+
+
+-- Q8
+select
+  o.user_id,
+  sum(revenue) * 1.0 / count(session_id) as arps
+from orders o
+left join sessions s on o.user_id = s.user_id
+group by o.user_id, s.user_id 
+
+-- Q9
+with segements as (
+  select 
+  user_id,
+  case 
+    when predicted_churn_prob > 0.7 then 'high risk'
+    when predicted_churn_prob > 0.4 then 'medium'
+    when predicted_churn_prob < 0.4 then 'low'
+  end as segement
+  from predictions
+)
+
+select 
+  segement,
+  count(distinct s.user_id) as total_users, 
+  sum(o.revenue) * 1.0 as total_revenue,
+  sum(o.revenue) * 1.0 / count(distinct s.user_id) as avg_revenue 
+from segements s
+left join orders o on s.user_id = o.user_id
+group by s.segement
+
+-- Q10
+with scores as (
+  select 
+  user_id,
+  case 
+    when event_type = 'view'        then 1
+    when event_type = 'click'       then 2
+    when event_type = 'add_to_cart' then 3
+    when event_type = 'purchase'    then 5
+  end as score
+  from events 
+)
+
+select
+  user_id,
+  sum(score) * 1.0 as total_score
+from scores
+group by user_id
+order by total_score desc 
+limit 20 ;
