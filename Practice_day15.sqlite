@@ -1,0 +1,191 @@
+-- Q1 
+with week_active as (
+  select 
+    strftime('%Y-%m', session_start) as monthly,
+    strftime('%Y-W%W', session_start) as week,
+    user_id
+  from sessions
+  group by monthly, week 
+),
+wau as (
+  select 
+    monthly,
+    week,
+    count(distinct user_id) as wau 
+  from week_active
+  group by monthly, week 
+),
+  
+mau as (
+  select 
+    monthly,
+    count(distinct user_id) as mau
+  from week_active
+  group by monthly
+),
+avg_wau as (
+  select 
+    monthly, 
+    avg(wau) as avg_wau
+  from wau 
+  group by monthly
+)
+
+select 
+  m.monthly,
+  m.mau,
+  round(w.avg_wau, 2) as avg_wau,
+  round(w.avg_wau * 1.0 / m.mau, 2) as wau_mau_ratio
+from mau m
+left join avg_wau w on m.monthly = w.monthly
+
+-- Q2
+select 
+  u.acquisition_channel,
+  round(avg(s.session_duration), 2) as avg_session_duration,
+  round(count(distinct s.session_id) * 1.0 / (select count(distinct user_id) from users), 2) as session_per_user,
+  round(count(distinct o.user_id) * 1.0 / (select count(distinct user_id) from users), 2) as conversion_rate,
+  round(sum(o.revenue) * 1.0 / (select count(distinct user_id) from users), 2) as arpu
+from users u
+left join orders o on u.user_id = o.user_id 
+left join sessions s on u.user_id = s.user_id
+group by u.acquisition_channel
+
+-- Q3
+select 
+  notification_type , 
+  round(count(case when clicked = 1 then 1 end) * 1.0 / count(*), 2) as ctr
+from notifications
+group by notification_type
+
+-- Q4
+select 
+  case when clicked = 0 then 'no click' else 'click' end as clicked,
+  round(count(distinct n.user_id) * 1.0 / (select count(distinct user_id) from users), 2) as conversion_rate,
+  round(sum(o.revenue) / (select count(distinct user_id) from users), 2) as arpu,
+  round(count(distinct session_id) * 1.0 / (select count(distinct user_id) from users), 2) as avg_session
+from notifications n
+left join orders o on n.user_id = o.user_id 
+left join sessions s on n.user_id = s.user_id
+group by clicked 
+
+-- Q5
+with num_orders as (
+  select
+    user_id,
+    count(distinct order_id) as num_order
+  from orders 
+  group by user_id 
+)
+
+select
+  case 
+    when num_order > 5 then 'Loyal Buyer' 
+    when num_order > 1 then 'Repeat Buyer'
+    when num_order = 1 then 'One-time Buyer'
+  else 'No buyer'
+  end as segment,
+  count(distinct num.user_id) as users,
+  round(avg(o.revenue), 2)as avg_revenue,
+  round(count(distinct s.session_id) * 1.0 / count(distinct num.user_id), 2) as avg_session
+from num_orders num
+left join orders o on num.user_id = o.user_id
+left join sessions s on num.user_id = s.user_id 
+group by segment
+order by 
+  case segment 
+    when 'Loyal Buyer' then 1
+    when 'Repeat Buyer' then 2
+    when 'One-time Buyer' then 3
+  end
+
+-- Q6
+with cohort as (
+  select 
+    user_id, 
+    signup_date
+  from users 
+),
+orders_month as (
+  select 
+    user_id ,
+    order_time, 
+    revenue
+  from orders
+),
+
+time_diff as (
+  select 
+    c.user_id,
+    strftime('%Y-%m', c.signup_date) as cohort_month,
+    ((cast(strftime('%Y', om.order_time) as integer) - 
+    cast(strftime('%Y', c.signup_date) as integer)) * 12)
+    +
+    (cast(strftime('%m', om.order_time) as integer) - 
+    cast(strftime('%m', c.signup_date) as integer))
+    as month_diff,
+    om.revenue
+  from cohort c
+  left join orders_month om on c.user_id = om.user_id 
+)
+  
+select 
+  case 
+    when month_diff = 1 then 'month1'
+    when month_diff = 2 then 'month2'
+    when month_diff = 3 then 'month3'
+    when month_diff = 4 then 'month4'
+    when month_diff = 5 then 'month5'
+    when month_diff = 6 then 'month6'
+    when month_diff = 7 then 'month7'
+    when month_diff = 8 then 'month8'
+    when month_diff = 0 then 'month0'
+  end as monthdiff,
+  round(sum(revenue), 2) as revenue
+from time_diff
+where month_diff is not null
+group by monthdiff
+
+-- Q7
+select 
+  exp.variant,
+  round(count(distinct o.user_id) * 1.0 / (select count(distinct user_id) from users), 2) as conversion_rate,
+  round(avg(o.revenue), 2) as avg_revenue,
+  round(avg(s.session_duration), 2) as avg_duration,
+  round(count(distinct o.order_id) * 1.0 / count(distinct o.user_id), 2) as freq_purchase
+from experiments exp
+left join orders o on exp.user_id = o.user_id 
+left join sessions s on exp.user_id = s.user_id 
+group by variant
+  
+-- Q8
+select
+  case 
+    when premium_user = 0 then 'non premium user' 
+    when premium_user = 1 then 'premium user' 
+  end as type_user,
+  round(sum(revenue) * 1.0, 2) as revenue,
+  round(count(distinct o.order_id) * 1.0 / count(distinct o.user_id), 2) as freq_purchase
+from users u
+left join orders o on u.user_id = o.user_id 
+group by type_user
+
+
+-- Q9
+with revenue_active_day as (
+  select 
+    s.user_id,
+    round(sum(o.revenue) * 1.0 / count(distinct s.session_start), 2) as revenue_per_active_day
+  from sessions s
+  left join orders o on s.user_id = o.user_id 
+  group by s.user_id 
+)
+
+select 
+  user_id,
+  revenue_per_active_day,
+  rank() over(order by revenue_per_active_day desc) as ranked 
+from revenue_active_day
+limit 20 ; 
+
+-- Q10
