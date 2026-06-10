@@ -1,0 +1,164 @@
+-- Q1
+select
+  variant,
+  count(distinct user_id) as users 
+from experiments
+group by variant
+order by users desc ;
+
+-- Q2
+select 
+  exp.variant,
+  round(count(distinct case when e.event_type = 'purchase' then exp.user_id end) * 100.0 /
+  count(distinct exp.user_id), 2) as conversion_rate 
+from events e
+left join experiments exp on e.user_id = exp.user_id
+group by exp.variant
+order by conversion_rate desc ;
+
+-- Q3
+select 
+  variant,
+  round(sum(revenue) * 1.0 / count(distinct exp.user_id), 2) as arpu  
+from orders o
+left join experiments exp on o.user_id = exp.user_id
+group by variant 
+order by arpu desc ;
+
+-- Q4
+select
+  variant,
+  round(sum(revenue) * 1.0 / count( o.order_id), 2) as aov
+from orders o 
+left join experiments exp on o.user_id = exp.user_id 
+group by variant 
+order by aov desc ;
+
+-- Q5
+select 
+  variant,
+  count(distinct case when event_type = 'view' then exp.user_id end) as users_view,
+  count(distinct case when event_type = 'add_to_cart' then exp.user_id end) as users_add_to_cart,
+  count(distinct case when event_type = 'purchase' then exp.user_id end) as users_purchase
+from events e 
+left join experiments exp on e.user_id = exp.user_id
+group by variant ;
+
+-- Q6
+select 
+  round((count(distinct case when variant = 'treatment' then user_id end) 
+  - count(distinct case when variant = 'control' then user_id end) ) * 1.0 /
+  count(distinct case when variant = 'control' then user_id end), 2) as uplift
+from experiments
+
+-- Q7 
+select 
+  round(((sum(case when variant = 'treatment' then o.revenue end ) * 1.0/ 
+  count(distinct case when variant = 'treatment' then exp.user_id end) ) -
+  (sum(case when variant = 'control' then o.revenue end ) * 1.0 / 
+  count(distinct case when variant = 'control' then exp.user_id end)) ) /
+  (sum(case when variant = 'control' then o.revenue end ) * 1.0 / 
+  count(distinct case when variant = 'control' then exp.user_id end)), 2) as uplife_arpu
+from orders o 
+left join experiments exp on o.user_id = exp.user_id 
+
+-- better version
+"""
+  with arpu as (
+    select 
+      exp.variant,
+      sum(o.revenue) * 1.0 / count(distinct exp.user_id) as arpu
+    from experiments exp
+    left join orders o 
+    on exp.user_id = o.user_id
+    group by exp.variant
+  )
+
+  select 
+    (t.arpu - c.arpu) / c.arpu as revenue_uplift
+  from arpu t
+  join arpu c
+  on t.variant = 'treatment'
+  and c.variant = 'control';
+"""
+-- Q8 
+select
+  country,
+  count(distinct case when variant = 'control' then exp.user_id end) as countrol_users,
+  count(distinct case when variant = 'treatment' then exp.user_id end) as treatment_users
+from users u 
+left join experiments exp on u.user_id = exp.user_id 
+group by u.country
+order by 2 desc, 3 desc ;
+
+-- Q9 
+select 
+  strftime('%W', event_time) as week,
+  round(count(distinct case when event_type = 'purchase' then user_id end) * 1.0 / 
+  count(distinct user_id), 2) as conversio_rate_week 
+from events 
+group by week 
+
+-- Q10
+with user_revenue as (
+  select 
+    user_id,
+    round(sum(revenue), 2) as revenue
+  from orders 
+  group by user_id
+),
+  
+ranked as (
+  select
+    user_id,
+    revenue,
+    ntile(10) over (order by revenue DESC) as decile
+  from user_revenue
+)
+  
+select
+  round(sum(case when decile = 1 then revenue end), 2) as top_10_revenue,
+  round(sum(revenue), 2) as total_revenue,
+  round(sum(case when decile = 1 then revenue end) * 100.0 / sum(revenue), 2) as top_10_pct
+from ranked ;
+
+-- Q8 
+select
+  country,
+  count(distinct case when variant = 'control' then exp.user_id end) as countrol_users,
+  count(distinct case when variant = 'treatment' then exp.user_id end) as treatment_users
+from users u 
+left join experiments exp on u.user_id = exp.user_id 
+group by u.country
+order by 2 desc, 3 desc ;
+
+-- Q9 
+select 
+  strftime('%W', event_time) as week,
+  round(count(distinct case when event_type = 'purchase' then user_id end) * 1.0 / 
+  count(distinct user_id), 2) as conversio_rate_week 
+from events 
+group by week 
+
+-- Q10
+with user_revenue as (
+  select 
+    user_id,
+    round(sum(revenue), 2) as revenue
+  from orders 
+  group by user_id
+),
+  
+ranked as (
+  select
+    user_id,
+    revenue,
+    ntile(10) over (order by revenue DESC) as decile
+  from user_revenue
+)
+  
+select
+  round(sum(case when decile = 1 then revenue end), 2) as top_10_revenue,
+  round(sum(revenue), 2) as total_revenue,
+  round(sum(case when decile = 1 then revenue end) * 100.0 / sum(revenue), 2) as top_10_pct
+from ranked ;
