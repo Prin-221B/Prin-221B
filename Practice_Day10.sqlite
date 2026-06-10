@@ -1,0 +1,152 @@
+-- Q1
+select 
+  strftime('%Y-%m', signup_date) as cohort_month,
+  count(distinct user_id) as users 
+from users 
+group by cohort_month ;
+
+-- Q2
+with cohort as (
+  select 
+    user_id,
+    date(min(signup_date), 'start of month') as cohort_month
+  from users u 
+  group by user_id
+),
+
+activity as (
+  select 
+    user_id,
+    date(session_start, 'start of month') as activity_month
+  from sessions 
+),
+
+retention as (
+  select 
+  a.user_id,
+  c.cohort_month,
+  a.activity_month,
+  (
+  (cast(strftime('%Y', a.activity_month ) as integer ) -
+  cast(strftime('%Y', c.cohort_month) as integer ) ) * 12
+  +
+  cast(strftime('%m', a.activity_month ) as integer ) -
+  cast(strftime('%m', c.cohort_month) as integer )
+  ) as month_number 
+  from cohort c
+  left join activity a on c.user_id = a.user_id 
+)
+
+select 
+  cohort_month,
+  count(distinct case when month_number = 0 then user_id end ) as month0,
+  count(distinct case when month_number = 1 then user_id end ) as month1,
+  count(distinct case when month_number = 2 then user_id end ) as month2,
+  count(distinct case when month_number = 3 then user_id end ) as month3
+from retention 
+group by cohort_month ; 
+
+-- Q3
+with cohort as (
+  select 
+    user_id,
+    date(min(signup_date), 'start of month') as cohort_month
+  from users
+  group by user_id 
+),
+
+activity as (
+  select 
+    user_id,
+    date(session_start, 'start of month') as activity_month
+  from sessions 
+),
+
+retention as (
+  select 
+  a.user_id,
+  c.cohort_month,
+  a.activity_month,
+  (
+  (cast(strftime('%Y', a.activity_month ) as integer ) -
+  cast(strftime('%Y', c.cohort_month) as integer ) ) * 12
+  +
+  cast(strftime('%m', a.activity_month ) as integer ) -
+  cast(strftime('%m', c.cohort_month) as integer )
+  ) as month_number 
+  from cohort c
+  left join activity a on c.user_id = a.user_id 
+)
+
+select 
+  cohort_month,
+  count(distinct case when month_number = 0 then user_id end ) as month0,
+  round(count(distinct case when month_number = 1 then user_id end ) * 100.0 / 
+  count(distinct case when month_number = 0 then user_id end ), 2) as retention_rate_month1,
+  round(count(distinct case when month_number = 2 then user_id end ) * 100.0 /
+  count(distinct case when month_number = 0 then user_id end ), 2) as retention_rate_month2,
+  round(count(distinct case when month_number = 3 then user_id end ) * 100.0 /
+  count(distinct case when month_number = 0 then user_id end ), 2) as retention_rate_month3
+from retention 
+group by cohort_month
+
+-- Q4
+with first_sessions as (
+  select
+  user_id,
+  date(min(session_start)) as first_date
+from sessions
+group by user_id
+)
+
+select
+  round(avg((julianday(f.first_date) - julianday(u.signup_date))), 2) as avg_day_to_first_date 
+from first_sessions f
+join users u on f.user_id = u.user_id
+
+-- Q5
+select 
+  round((count(distinct o.user_id) * 100.0/ count(distinct u.user_id)), 2) as conversion_rate
+from users u
+left join orders on u.user_id = o.user_id ;
+
+-- Q6
+select 
+  u.acquisition_channel,
+  round((count(distinct o.user_id) * 100.0/ count(distinct u.user_id)), 2) as conversion_rate
+from users u
+left join orders o on u.user_id = o.user_id
+group by acquisition_channel
+
+-- Q7
+select 
+  round((sum(revenue) * 1.0 / count(distinct u.user_id)), 2) as arpu
+from users u
+left join orders o on u.user_id = o.user_id ;
+
+-- Q8
+select 
+  round((sum(revenue) * 1.0 / count(distinct user_id)), 2) as arppu
+from orders o
+
+-- Q9 
+select 
+    strftime('%Y-%m', signup_date) as cohort_month,
+    round(sum(revenue) * 1.0, 2) as total_revenue
+from users u
+left join orders o on u.user_id = o.user_id
+group by cohort_month ;
+
+-- Q10
+select 
+  event_type as stage,
+  count(distinct user_id) as users
+from events 
+where event_type in ('view', 'add_to_cart', 'purchase')
+group by event_type
+order by 
+  case event_type
+    when 'view' then 1
+    when 'add_to_cart' then 2
+    when 'purchase' then 3
+  end ;
