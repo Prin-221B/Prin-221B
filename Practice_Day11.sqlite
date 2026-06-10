@@ -1,0 +1,251 @@
+-- Q1
+with cohort as (
+  select 
+    user_id,
+    acquisition_channel,
+    date(min(signup_date), 'start of month') as cohort_month
+  from users 
+  group by user_id
+),
+
+activity as (
+  select 
+    user_id,
+    date(session_start,'start of month') as activity_month 
+  from sessions 
+),
+retention as (
+  select 
+    c.cohort_month,
+    a.activity_month,
+    c.user_id,
+    c.acquisition_channel,
+    (
+    (cast(strftime('%Y', a.activity_month) as integer ) -
+    cast(strftime('%Y', c.cohort_month) as integer )) * 12
+    +
+    cast(strftime('%m', a.activity_month) as integer ) -
+    cast(strftime('%m', c.cohort_month) as integer )
+    ) as month_number
+  from cohort c
+  left join activity a 
+  on c.user_id = a.user_id
+)
+
+select 
+  acquisition_channel,
+  count(distinct case when month_number = 0 then user_id end ) as month_0,
+  count(distinct case when month_number = 1 then user_id end ) as month_1,
+  round(count(distinct case when month_number = 1 then user_id end ) * 100.0 / 
+  count(distinct case when month_number = 0 then user_id end ), 2)as retention_rate_month1,
+  count(distinct case when month_number = 2 then user_id end ) as month_2,
+  round(count(distinct case when month_number = 2 then user_id end ) * 100.0 / 
+  count(distinct case when month_number = 0 then user_id end ), 2)as retention_rate_month2
+from retention 
+group by acquisition_channel
+
+-- Q2
+with cohort as (
+  select 
+    user_id,
+    country,
+    date(min(signup_date), 'start of month') as cohort_month
+  from users 
+  group by user_id
+),
+
+activity as (
+  select 
+    user_id,
+    date(session_start,'start of month') as activity_month 
+  from sessions 
+),
+retention as (
+  select 
+    c.cohort_month,
+    a.activity_month,
+    c.user_id,
+    c.country,
+    (
+    (cast(strftime('%Y', a.activity_month) as integer ) -
+    cast(strftime('%Y', c.cohort_month) as integer )) * 12
+    +
+    cast(strftime('%m', a.activity_month) as integer ) -
+    cast(strftime('%m', c.cohort_month) as integer )
+    ) as month_number
+  from cohort c
+  left join activity a 
+  on c.user_id = a.user_id
+)
+
+select 
+  country,
+  count(distinct case when month_number = 0 then user_id end ) as month_0,
+  count(distinct case when month_number = 1 then user_id end ) as month_1,
+  round(count(distinct case when month_number = 1 then user_id end ) * 100.0 / 
+  count(distinct case when month_number = 0 then user_id end ), 2)as retention_rate_month1,
+  count(distinct case when month_number = 2 then user_id end ) as month_2,
+  round(count(distinct case when month_number = 2 then user_id end ) * 100.0 / 
+  count(distinct case when month_number = 0 then user_id end ), 2)as retention_rate_month2
+from retention 
+group by country ;
+
+-- Q3
+with step_count as (
+  select 
+    user_id,
+    max(case when event_type = 'view' then 1 else 0 end ) as viewed,
+    max(case when event_type = 'add_to_cart' then 1 else 0 end ) as added,
+    max(case when event_type = 'purchase' then 1 else 0 end ) as purchased
+  from events 
+  group by user_id
+),
+aggregated as (
+  select
+    sum(viewed) as total_view,
+    sum(added) as total_add,
+    sum(purchased) as total_purchase,
+    sum(case when viewed = 1 and added = 1 then 1 else 0 end ) as view_to_add,
+    sum(case when added  = 1 and purchased = 1 then 1 else 0 end ) as add_to_purchase
+  from step_count 
+)
+
+select 
+  'view -> add_to_cart' as step,
+  round((1.0 * view_to_add / total_view), 2) as conversion_rate
+from aggregated
+
+union all
+
+select 
+  'add_to_cart -> purchase' as step,
+  round((1.0 * add_to_purchase / total_add ), 2) as conversion_rate
+from aggregated
+  
+-- Q4
+with step_count as (
+  select 
+    user_id,
+    max(case when event_type = 'view' then 1 else 0 end ) as viewed,
+    max(case when event_type = 'add_to_cart' then 1 else 0 end ) as added,
+    max(case when event_type = 'purchase' then 1 else 0 end ) as purchased
+  from events 
+  group by user_id
+),
+aggregated as (
+  select
+    sum(viewed) as total_view,
+    sum(added) as total_add,
+    sum(purchased) as total_purchase,
+    sum(case when viewed = 1 and added != 1 then 1 else 0 end ) as view_not_add,
+    sum(case when added  = 1 and purchased != 1 then 1 else 0 end ) as add_not_purchase
+  from step_count 
+)
+
+select 
+  'view_not_cart' as step,
+  sum(case when viewed = 1 and added = 0 then 1 else 0 end) as users
+from step_count
+
+union all
+
+select 
+  'add_not_purchase' as step,
+  sum(case when purchased = 1 and added = 1 then 1 else 0 end) as users
+from step_count
+
+-- Q5
+with user_time as(
+  select 
+    u.user_id,
+    u.signup_date,
+    min(o.order_time) as first_purchase
+  from users u
+  left join orders o on u.user_id = o.user_id
+  group by u.user_id
+),
+time_diff as (
+  select 
+    user_id,
+    julianday(first_purchase) - julianday(signup_date) as day_diff
+  from user_time 
+  where first_purchase is not null 
+),
+segmented as (
+  select 
+    user_id,
+    case 
+      when day_diff < 4 then '0-3 days' 
+      when day_diff < 7 then '4-6 days'
+      else '7+ days'
+    end as segment
+  from time_diff
+)
+
+select 
+  segment,
+  count(user_id) as users
+from segmented
+group by segment;
+
+-- Q6
+select 
+  e.variant,
+  round(count(distinct o.user_id) * 1.0 / count(distinct e.user_id), 2) as conversion_rate
+from experiments e
+left join orders o on e.user_id = o.user_id
+group by variant
+
+-- Q7
+select
+  e.variant,
+  sum(revenue) / count(distinct e.user_id) as arpu
+from experiments e
+left join orders o on e.user_id = o.user_id 
+group by variant ;
+
+-- Q8
+select
+  country,
+  variant,
+  count(distinct e.user_id) as users
+from users u
+left join experiments e on u.user_id = e.user_id
+group by country, variant ;
+
+-- Q9
+select 
+  session_start,
+  count(distinct user_id) as active_users
+from sessions 
+group by session_start
+order by sesion_start desc ;
+
+-- Q10
+with user_revenue as (
+  select 
+    user_id,
+    sum(revenue) as total_revenue 
+  from orders
+  group by user_id 
+),
+
+ranked as (
+  select 
+    user_id,
+    total_revenue,
+    ntile(10) over(order by total_revenue desc) as decile
+  from user_revenue
+),
+
+summary as (
+  select
+    user_id,
+    sum(case when decile = 1 then total_revenue end ) as top10_revenue,
+    sum(total_revenue) as total_revenue
+  from ranked 
+)
+
+select 
+  round(top10_revenue * 100.0 / total_revenue, 2) as revenue_share_top10
+from summary
