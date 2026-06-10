@@ -1,0 +1,167 @@
+-- Q1
+select 
+  u.acquisition_channel as channel,
+  count(distinct u.user_id) as users,
+  round(sum(o.revenue), 2) as revenue,
+  round(sum(o.revenue)  / count(distinct u.user_id), 2) as arpu
+from users u 
+left join orders o on u.user_id = o.user_id
+group by u.acquisition_channel
+order by arpu desc ;
+
+-- Q2
+select 
+  u.acquisition_channel as channel,
+  m.spend, 
+  count(distinct u.user_id) as users,
+  round(m.spend / count(distinct u.user_id), 2) as cac
+from users u
+left join marketing_spend m on u.acquisition_channel = m.channel
+group by u.acquisition_channel ;
+
+-- Q3
+select
+  u.acquisition_channel as channel,
+  round(sum(revenue) / count(distinct o.user_id), 2)  as ltv
+from users u 
+left join orders o on u.user_id = o.user_id
+group by acquisition_channel ;
+
+-- Q4
+with metric as (
+  select 
+    u.acquisition_channel as channel,
+    count(u.user_id) as users,
+    sum(o.revenue) * 1.0 as total_revenue,
+    m.spend 
+  from users u
+  left join orders o on u.user_id = o.user_id
+  left join marketing_spend m on m.channel = u.acquisition_channel
+  group by u.acquisition_channel
+)
+select 
+  channel,
+  round(total_revenue / users, 2) as LTV,
+  round(spend / users ,2) as cac,
+  round(
+    (total_revenue / users) - (spend / users)
+  , 2) as profit
+from metric 
+
+
+-- Q5
+with metric as (
+  select 
+    u.acquisition_channel as channel,
+    count(u.user_id) as users,
+    sum(o.revenue) * 1.0 as total_revenue,
+    m.spend 
+  from users u
+  left join orders o on u.user_id = o.user_id
+  left join marketing_spend m on m.channel = u.acquisition_channel
+  group by u.acquisition_channel
+)
+select 
+  channel,
+  users,
+  round(total_revenue / users, 2) as LTV,
+  round(spend / users ,2) as cac,
+  round(
+    (total_revenue / users) - (spend / users)
+  , 2) as profit
+from metric
+order by users desc, profit desc ;
+
+-- Q6
+with user_step as (
+  select 
+    user_id,
+    max(case when event_type = 'view' then 1 else 0 end ) as viewed,
+    max(case when event_type = 'purchase' then 1 else 0 end ) as purchased
+  from events 
+  group by user_id
+),
+aggregated as (
+  select 
+    count(*) FILTER(where (viewed = 1)) as view_users,
+    count(*) FILTER(where (purchased = 1)) as purchase_users
+  from user_step
+)
+  
+select 
+  'view -> purchase ' as stage,
+  view_users as users,
+  round(purchase_users * 1.0 / view_users, 2) as conversion_rate
+from aggregated
+
+-- Q7
+with user_revenue as (
+  select
+    user_id,
+    round(sum(revenue) * 1.0, 2) as revenue
+  from orders 
+  group by user_id
+),
+ranked as (
+  select 
+    user_id,
+    revenue,
+    ntile(10) over(order by revenue desc ) as decile
+  from user_revenue 
+)
+  
+select 
+  round(
+  sum(case when decile in (1,2) then revenue else 0 end ) * 100.0 
+  / sum(revenue), 2
+  ) as generate_revenue_percent
+from ranked
+
+-- Q8
+select 
+  u.country,
+  u.acquisition_channel as channel,
+  round(sum(o.revenue), 2) as revenue,
+  round(sum(o.revenue) / count(distinct u.user_id), 2) as arpu,
+  round(sum(o.revenue) / count(distinct o.user_id), 2) as ltv
+from users u 
+left join orders o on u.user_id = o.user_id
+group by u.country, u.acquisition_channel
+order by 3 desc,4 desc,5 desc ; 
+
+-- Q9 
+with user_time as (
+  select 
+    u.user_id,
+    signup_date,
+    min(order_time) as first_purchase
+  from users u
+  left join orders o on u.user_id = o.user_id
+  group by u.user_id
+),
+timediff as (
+  select 
+    user_id,
+    julianday(first_purchase) - julianday(signup_date) as datediff
+  from user_time
+  where first_purchase is not null
+)
+select 
+  case 
+    when datediff < 6 then  '0-5 days' 
+    when datediff < 11 then '6-10 days'
+    when datediff < 16 then '11-15 days'
+    else '15+ days'
+  end as segment,
+  count(distinct user_id) as users
+from timediff 
+group by segment
+order by 
+  case segment
+    when '0-5 days' then 1
+    when '6-10 days' then 2
+    when '11-15 days' then 3
+    when '15+ days' then 4
+  end
+
+-- Q10
