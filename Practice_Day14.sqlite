@@ -1,0 +1,152 @@
+-- Q1
+select
+  strftime('%Y-%m', session_start) as active_month,
+  count(distinct s.user_id) as users
+from users u
+left join sessions s on u.user_id = s.user_id
+where premium_user = 1
+group by active_month
+
+-- Q2
+with active_month as (
+  select 
+    u.user_id,
+    u.signup_date,
+    s.session_start
+  from users u 
+  left join sessions s on u.user_id = s.user_id
+),
+month1_retention as (
+  select 
+    user_id,
+    (
+      (cast(strftime('%Y', session_start) as integer) - 
+      cast(strftime('%Y', signup_date) as integer)) * 12 
+      +
+      (cast(strftime('%m', session_start) as integer) - 
+      cast(strftime('%m', signup_date) as integer))
+    ) as month_number
+  from active_month 
+  where month_number = 1
+)
+
+select 
+  case when u.premium_user = 1 then 'premium' else 'non premium' end as user_type,
+  round(count(distinct m1.user_id ) * 1.0 / count(distinct u.user_id), 2) as users
+from users u
+left join month1_retention m1 on u.user_id = m1.user_id
+group by u.premium_user
+
+-- Q3
+select 
+  u.acquisition_channel,
+  s.session_start,
+  round(sum(o.revenue) * 1.0, 2) as total_revenue
+from users u 
+left join sessions s on u.user_id = s.user_id
+left join orders o on u.user_id = o.user_id
+group by u.acquisition_channel, s.session_start
+having total_revenue is not null
+
+-- Q4
+with event as (
+  select
+    user_id,
+    max(case when event_type = 'view' then 1 else 0 end ) as viewed,
+    max(case when event_type = 'add_to_cart' then 1 else 0 end ) as added,
+    max(case when event_type = 'purchase' then 1 else 0 end ) as purchased
+  from events 
+  group by user_id
+)
+
+select 
+  u.country,
+  sum(viewed) as users_view,
+  sum(added) as users_add,
+  sum(purchased) as users_purchase
+from users u 
+left join event e on u.user_id = e.user_id
+group by country 
+
+-- Q5
+with first_purchases as (
+  select 
+    u.user_id,
+    u.signup_date,
+    min(date(o.order_time)) as first_purchase
+  from users u 
+  left join orders o on u.user_id = o.user_id 
+  group by u.user_id
+),
+
+time_diff as (
+  select 
+    user_id,
+    julianday(first_purchase) - julianday(signup_date) as date_diff
+  from first_purchases 
+  where first_purchase is not null 
+)
+
+select 
+  round(avg(date_diff), 2) as avg_days_to_first_purchase
+from time_diff ;
+  
+-- Q6
+select 
+  e.variant,
+  round(count(distinct o.user_id) * 1.0 / count(distinct u.user_id), 2) as conversion_rate 
+from users u 
+left join orders o on u.user_id = o.user_id
+left join experiments e on u.user_id = e.user_id 
+group by variant
+
+-- Q7
+select 
+  e.variant,
+  round(sum(revenue) * 1.0 / count(distinct o.user_id), 2) as arpu,
+  round(sum(o.revenue) / count(o.order_id), 2) as average_order_value,
+  round(sum(o.revenue) * 1.0, 2) as total_revenue
+from experiments e 
+left join orders o on e.user_id = o.user_id
+group by variant
+
+-- Q8
+with ticket_type as (
+  select 
+  u.user_id,
+  case when ticket_id is not null then 'support' else 'non support' end as type
+from users u
+left join support_tickets t on u.user_id = t.user_id
+)
+
+select 
+  t.type,
+  round(count(distinct o.user_id) * 1.0 / count(distinct t.user_id), 2) as conversion_rate,
+  sum(o.revenue) as total_revenue
+from ticket_type t
+left join orders o on t.user_id = o.user_id 
+group by t.type
+  
+-- Q9
+with scores as (
+  select 
+  user_id,
+  event_type,
+  case 
+    when event_type = 'view' then 1 
+    when event_type = 'click' then 2
+    when event_type = 'add_to_cart' then 3
+    when event_type = 'purchase' then 5
+  end as score
+from events
+)
+
+select 
+  user_id,
+  sum(score) as total_score 
+from scores 
+group by user_id 
+order by total_score desc
+limit 20 ;
+
+-- Q10
