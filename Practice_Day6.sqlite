@@ -1,0 +1,159 @@
+-- Q1
+select 
+  strftime('%Y-%m', session_start) as Y_M,
+  count(distinct user_id) as MAU
+from sessions 
+group by Y_M
+
+-- Q2
+select
+  session_start as date,
+  count(distinct user_id) as DAU
+from sessions
+group by session_start 
+
+-- Q3
+ """
+with dau as (
+select
+  session_start as date,
+  count(distinct user_id) as dau
+from sessions
+group by session_start
+),
+
+mau as (
+select
+  strftime('%Y-%m', session_start) as monthly,
+  count(distinct user_id) as mau
+from sessions
+group by monthly
+)
+
+select
+  d.date,
+  d.dau,
+  m.mau,
+  d.dau * 1.0 / m.mau as dau_mau_ratio
+from dau d
+join mau m on strftime('%Y-%m', d.date) = m.monthly
+ """
+-- Q4
+ """
+with funnel as (
+
+select
+  count(distinct case when event_type='view' then user_id end) as view_users,
+  count(distinct case when event_type='add_to_cart' then user_id end) as add_users,
+  count(distinct case when event_type='purchase' then user_id end) as purchase_users
+from events
+
+)
+
+select
+  add_users * 1.0 / view_users as view_to_add,
+  purchase_users * 1.0 / add_users as add_to_purchase
+from funnel
+ """
+  
+-- Q5
+select 
+  sum(revenue) * 1.0 / count(distinct o.user_id) as ARPU
+from users u
+left join orders o on u.user_id = o.user_id
+
+-- Q6
+select 
+  country,
+  sum(revenue) * 1.0 as revenue
+from users u
+left join orders o on u.user_id = o.user_id 
+group by country 
+
+-- Q7
+select
+  u.signup_date,
+  sum(case 
+    when julianday(session_start) - julianday(signup_date) = 1 then 1
+    else 0
+  end ) as retained_users
+from users u
+left join sessions s on u.user_id = s.user_id
+group by u.signup_date
+
+-- Q8
+select 
+  u.user_id,
+  count(session_start) as total_sessions,
+  count(order_id) as total_orders,
+  sum(coalesce (revenue, 0)) * 1.0 as total_revenue,
+  julianday('now') - julianday(signup_date) as day_since_signup
+from users u
+left join sessions s on u.user_id = s.user_id
+left join orders o on s.user_id = o.user_id
+group by u.user_id ; 
+  
+-- Q9
+with engagement as (
+  select
+    user_id,
+    event_type,
+    case
+    when event_type = 'view' then 1
+    when event_type = 'click' then 2
+    when event_type = 'add_to_cart' then 3
+    else 5
+  end as score 
+  from events
+)
+
+select 
+  user_id,
+  sum(score) as engagement_score 
+from engagement
+group by user_id
+
+-- Q10
+with segment_churn as (
+  select 
+    user_id,
+    case 
+      when predicted_churn_prob > 0.7 then 'high_churn_active'
+      else 'high_churn_inactive'
+    end as segment
+  from predictions
+)
+
+select 
+  segment,
+  count(distinct sc.user_id ) as total_users,
+  avg(coalesce(revenue, 0)) * 1.0 as total_revenue
+from segment_churn sc
+left join orders o on sc.user_id = o.user_id 
+group by segment ;
+
+  """
+with user_orders as (
+
+select
+  user_id,
+  count(order_id) as total_orders
+from orders
+group by user_id
+
+)
+
+select
+case
+  when p.predicted_churn_prob > 0.7 and o.total_orders > 0
+       then 'high_churn_active'
+  when p.predicted_churn_prob > 0.7 and o.total_orders is null
+       then 'high_churn_inactive'
+end as segment,
+count(distinct p.user_id) as users
+
+from predictions p
+left join user_orders o
+on p.user_id = o.user_id
+group by segment
+  """
