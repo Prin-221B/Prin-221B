@@ -1,0 +1,203 @@
+-- Q1
+select
+  strftime('%Y- %m', signup_date) as YM,
+  count(user_id) as num_of_users
+from users 
+group by YM
+
+-- Q2
+select 
+  acquisition_channel,
+  sum(revenue) * 1.0 as total_revenue
+from users u
+left join transactions t on u.user_id = t.user_id
+group by acquisition_channel
+order by total_revenue desc ;
+
+-- Q3
+select 
+  sum(revenue) * 1.0 / count(distinct user_id) as average_revenue_per_paying_user
+from transactions
+
+-- Q4
+select 
+  variant,
+  count(distinct e.user_id) as num_users,
+  sum(revenue) * 1.0  as total_revenue , 
+  avg(revenue) * 1.0  as average_revenue
+from experiments e
+left join transactions t on e.user_id = t.user_id
+group by variant 
+
+"""
+  with user_revenue as (
+    select
+      e.variant,
+      e.user_id,
+      sum(coalesce(revenue,0)) as revenue
+  from experiments e
+  left join transactions t  on e.user_id = t.user_id
+  group by e.variant, e.user_id
+  )
+
+  select
+    variant,
+    count(user_id) as users,
+    sum(revenue) as total_revenue,
+    avg(revenue) as avg_revenue_per_user
+  from user_revenue
+  group by variant
+  """
+  
+-- Q5
+select 
+  count(distinct case 
+    when event_type = 'view' then user_id
+    end) as view_product ,
+  count(distinct case 
+    when event_type = 'click' then user_id
+    end) as clike ,
+  count(distinct case 
+    when event_type = 'add_to_cart' then user_id
+    end) as add_to_cart ,
+  count(distinct case 
+    when event_type = 'purchase' then user_id
+    end) as purchase
+from user_activity
+
+"""
+  select 
+    count(distinct case when event_type = 'view' then user_id end) as view_users,
+    count(distinct case when event_type = 'add_to_cart' then user_id end) as cart_users,
+    count(distinct case when event_type = 'purchase' then user_id end) as purchase_users,
+
+    count(distinct case when event_type = 'add_to_cart' then user_id end) * 1.0 /
+    count(distinct case when event_type = 'view' then user_id end) as view_to_cart,
+
+    count(distinct case when event_type = 'purchase' then user_id end) * 1.0 /
+    count(distinct case when event_type = 'add_to_cart' then user_id end) as cart_to_purchase
+  
+  from user_activity
+"""
+
+-- Q6
+select
+  predicted_churn_prob,
+  count (distinct user_id) as num_users
+from predictions 
+where predicted_churn_prob > 0.7
+group by predicted_churn_prob
+
+  """
+  select
+  case
+    when predicted_churn_prob > 0.7 then 'high_risk'
+    else 'not_high_risk'
+  end as segment,
+  count(distinct user_id) as users
+  from predictions
+  group by segment
+  """
+  
+-- Q7
+select 
+  case
+  when predicted_churn_prob > 0.7 then 'high_risk'
+  when predicted_churn_prob > 0.4 then 'medium'
+  else 'low'
+  end as risk_segment,
+  count(p.user_id) as num_users,
+  sum(coalesce(revenue,0)) * 1.0 as total_revenue
+from predictions p
+left join transactions t on p.user_id = t.user_id
+group by risk_segment 
+order by risk_segment ;
+
+ """
+   select 
+    case
+      when predicted_churn_prob > 0.7 then 'high_risk'
+      when predicted_churn_prob > 0.4 then 'medium'
+      else 'low'
+    end as risk_segment,
+
+    count(distinct p.user_id) as users,
+    sum(coalesce(revenue,0)) as revenue
+
+  from predictions p
+  left join transactions t on p.user_id = t.user_id
+  group by risk_segment
+  order by revenue desc
+  """
+
+-- Q8
+select 
+  u.user_id,
+  count(order_id) as total_orders,
+  sum(coalesce(revenue, 0 )) * 1.0 as total_revenue,
+  signup_date,
+  -- julianday('now') - julianday(signup_date) as days_since_signup
+from users u
+left join transactions t on u.user_id = t.user_id 
+group by u.user_id
+
+-- Q9
+with engagement_score as (
+  select 
+    user_id,
+    event_type,
+    case 
+      when event_type = 'view' then 1
+      when event_type = 'click' then 2
+      when event_type = 'add_to_cart' then 3
+      when event_type = 'purchase' then 5
+    end as score 
+  from user_activity
+)
+  
+select
+  user_id,
+  sum(score) * 1.0 as total_score 
+from engagement_score 
+group by user_id
+order by total_score desc ;
+
+-- Q10
+with segment_churn as (
+  select 
+    user_id,
+    predicted_churn_prob ,
+    case 
+      when predicted_churn_prob < 0.7 then 'predicted_churn_but_active'
+      else 'predicted_churn_and_inactive'
+    end as segment
+  from predictions
+)
+
+select 
+  segment,
+  count(distinct sc.user_id) as total_users,
+  sum(coalesce(revenue, 0 )) * 1.0/ count(distinct sc.user_id) as avg_revenue
+from segment_churn sc
+left join transactions t on sc.user_id = t.user_id
+group by segment
+
+ """
+  with churn_segment as (
+    select 
+    user_id,
+    case
+      when predicted_churn_prob > 0.7 then 'predicted_churn'
+      else 'not_churn'
+    end as segment
+  from predictions
+  )
+
+  select
+    segment,
+    count(distinct c.user_id) as users,
+    avg(coalesce(revenue,0)) as avg_revenue
+  from churn_segment c
+  left join transactions t on c.user_id = t.user_id
+  group by segment
+  """
