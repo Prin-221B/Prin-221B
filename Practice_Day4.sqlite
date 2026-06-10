@@ -1,0 +1,98 @@
+-- Q1
+select
+  strftime('%Y-%m', signup_date) as y_m , 
+  count(user_id) as total_users
+from users
+group by y_m ;
+
+-- Q2
+select 
+  country,
+  sum(revenue) as total_revenue
+from users u 
+left join orders o on u.user_id = o.user_id
+group by country ;
+
+-- Q3
+select
+  sum(revenue) / count(distinct user_id) as Average_revenue_per_user 
+from orders 
+
+-- Q4
+select 
+  count(distinct user_id) as total_users,
+  count(distinct case 
+    when event_type = 'purchase' then user_id 
+    end) as purchase_users ,
+  count(distinct case when event_type = 'purchase' then user_id end) * 1.0 / count(distinct user_id) as conversion_rate
+from events
+
+"""  
+  SELECT
+    COUNT(DISTINCT u.user_id) AS total_users,
+    COUNT(DISTINCT CASE 
+      WHEN e.event_type = 'purchase' THEN u.user_id 
+    END) AS purchase_users,
+    COUNT(DISTINCT CASE 
+      WHEN e.event_type = 'purchase' THEN u.user_id 
+    END) * 1.0 / COUNT(DISTINCT u.user_id) AS conversion_rate
+  FROM users u
+  LEFT JOIN events e
+  ON u.user_id = e.user_id;
+"""
+-- Q5
+select 
+  count(distinct case 
+    when event_type = 'view_product' then user_id
+    end) as view_product ,
+  count(distinct case 
+    when event_type = 'add_to_cart' then user_id
+    end) as add_to_cart ,
+  count(distinct case 
+    when event_type = 'purchase' then user_id
+    end) as purchase 
+from events
+
+-- Q6
+select
+  u.user_id,
+  julianday(min(event_time)) - julianday(signup_date) as day_to_purchase
+from users u
+left join events e on u.user_id = e.user_id
+where event_type = 'purchase'
+group by u.user_id
+
+-- Q7
+select 
+  user_id,
+  sum(revenue) * 1.0 as lifetime_value
+from orders 
+group by user_id
+order by lifetime_value desc 
+limit 10 ;
+
+-- Q8
+select
+  acquisition_channel,
+  sum(revenue) as revenue
+from users u 
+left join orders o on u.user_id = o.user_id
+group by acquisition_channel
+order by 1 desc ;
+
+-- Q9
+select 
+  session_start,
+  count(user_id) as DAU
+from sessions
+group by session_start ;
+
+-- Q10
+select
+  u.signup_date,
+  CASE 
+    WHEN julianday(s.session_start) - julianday(u.signup_date) = 1 THEN 1 ELSE 0 
+  END AS retained_day1
+from users u
+left join sessions s on u.user_id = s.user_id
+group by u.signup_date
